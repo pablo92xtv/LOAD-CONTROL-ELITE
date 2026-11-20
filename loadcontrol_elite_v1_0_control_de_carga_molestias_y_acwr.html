@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoadControl Elite v1.0 | Control de Carga, Molestias & ACWR</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js para analítica visual -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (xlsx) para lectura y generación real de archivos Excel .xlsx -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- PapaParse para lectura robusta de CSV publicado desde Google Sheets -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <!-- Tipografía Plus Jakarta Sans & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        navy: {
+                            900: '#0F172A',
+                            950: '#090E1A',
+                        },
+                        cobalt: {
+                            50: '#EFF6FF',
+                            100: '#DBEAFE',
+                            500: '#3B82F6',
+                            600: '#2563EB',
+                            700: '#1D4ED8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #F8FAFC;
+            color: #0F172A;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .card-surface {
+            background-color: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
+        }
+
+        .card-elevated {
+            background-color: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.06), 0 4px 10px -6px rgba(15, 23, 42, 0.03);
+        }
+
+        .inline-metric-input {
+            width: 60px;
+            text-align: center;
+            border-radius: 0.5rem;
+            border: 1px solid #CBD5E1;
+            background-color: #F8FAFC;
+            padding: 0.25rem 0.35rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 0.8125rem;
+            color: #0F172A;
+            transition: all 0.15s ease;
+        }
+        .inline-metric-input:hover {
+            border-color: #2563EB;
+            background-color: #EFF6FF;
+        }
+        .inline-metric-input:focus {
+            outline: none;
+            border-color: #2563EB;
+            background-color: #FFFFFF;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        ::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #F1F5F9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94A3B8;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Notificaciones Toast Flotantes -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none"></div>
+
+    <!-- Modal de Confirmación Personalizado (Sin alert/confirm nativos) -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+        <div class="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                </div>
+                <h3 id="confirm-title" class="text-lg font-extrabold text-slate-900">Confirmar acción</h3>
+            </div>
+            <p id="confirm-message" class="text-slate-600 text-sm leading-relaxed mb-6">¿Estás seguro de continuar?</p>
+            <div class="flex justify-end gap-3">
+                <button id="confirm-cancel" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold transition">Cancelar</button>
+                <button id="confirm-ok" class="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold shadow-sm transition">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- CABECERA EDITORIAL EN AZUL MARINO PROFUNDO (#0F172A)                  -->
+    <!-- ===================================================================== -->
+    <header class="bg-navy-900 text-white sticky top-0 z-40 shadow-lg border-b border-slate-800">
+        <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between py-3.5 gap-3">
+                
+                <!-- Marca y Versión -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cobalt-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-cobalt-600/30">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg font-extrabold tracking-tight text-white">LOADCONTROL <span class="text-sky-400">ELITE</span></span>
+                                <span class="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">v1.0</span>
+                            </div>
+                            <p class="text-xs text-slate-400">Control de Carga Interna (sRPE), Molestias & Ratio Agudo:Crónico</p>
+                        </div>
+                    </div>
+
+                    <!-- Badge móvil -->
+                    <div class="lg:hidden flex items-center gap-2 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700">
+                        <span id="mobile-sync-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+                        <span id="mobile-records-count" class="font-mono text-xs font-bold text-slate-200">0 reg.</span>
+                    </div>
+                </div>
+
+                <!-- Navegación Principal (3 Pestañas) -->
+                <nav class="flex bg-slate-950/70 p-1 rounded-xl border border-slate-800 overflow-x-auto">
+                    <button onclick="switchTab('dashboard')" id="nav-tab-dashboard" class="nav-tab flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition bg-cobalt-600 text-white shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        <span>1. Dashboard Carga & ACWR</span>
+                    </button>
+
+                    <button onclick="switchTab('alerts')" id="nav-tab-alerts" class="nav-tab flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <span>2. Alertas Médico-Físicas</span>
+                        <span id="nav-alert-badge" class="ml-1 px-2 py-0.5 text-[11px] font-mono font-bold rounded-full bg-rose-500 text-white">0</span>
+                    </button>
+
+                    <button onclick="switchTab('data')" id="nav-tab-data" class="nav-tab flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+                        <span>3. Gestión de Datos & Google Sheets</span>
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- BARRA DE CONEXIÓN DIRECTA CON GOOGLE SHEETS (CSV PUBLICADO) -->
+        <div class="bg-slate-950/90 border-t border-slate-800/90">
+            <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+                    <div class="flex items-center gap-2.5 flex-1">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-extrabold uppercase tracking-wider shrink-0">
+                            <span id="gsheets-status-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            Google Sheets CSV
+                        </span>
+                        <input type="url" id="gsheets-url-input" placeholder="Pega aquí tu enlace publicado de Google Sheets (https://docs.google.com/.../pub?output=csv)"
+                            class="w-full bg-slate-900 border border-slate-700 focus:border-emerald-400 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 placeholder-slate-500 outline-none transition">
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span id="last-sync-label" class="text-[11px] font-mono text-slate-400 hidden sm:inline">Modo Demo Activo</span>
+                        <button onclick="syncGoogleSheetsNow()" id="btn-sync-gsheets" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition">
+                            <svg id="sync-spinner-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            <span>Sincronizar Ahora</span>
+                        </button>
+                        <button onclick="downloadVercelIndexHTML()" title="Descarga este archivo como index.html listo para arrastrar a Vercel" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            <span class="hidden sm:inline">index.html Vercel</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- ===================================================================== -->
+        <!-- PESTAÑA 1: DASHBOARD DE CARGA & RATIO AGUDO:CRÓNICO (ACWR)            -->
+        <!-- ===================================================================== -->
+        <section id="view-dashboard" class="space-y-6">
+
+            <!-- 3 DESPLEGABLES SINCRONIZADOS DE FILTRADO -->
+            <div class="card-elevated rounded-2xl p-4 sm:p-5">
+                <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+                        <!-- Desplegable 1: MICROCICLO -->
+                        <div>
+                            <label for="filter-microciclo" class="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
+                                <span>1. Microciclo</span>
+                                <span id="microciclo-dates-label" class="text-[11px] font-mono font-semibold text-cobalt-600"></span>
+                            </label>
+                            <select id="filter-microciclo" onchange="onMicrocicloChange()" class="w-full bg-slate-50 hover:bg-white border border-slate-300 focus:border-cobalt-600 focus:ring-2 focus:ring-cobalt-600/15 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 outline-none transition cursor-pointer">
+                            </select>
+                        </div>
+
+                        <!-- Desplegable 2: DIA SEMANA / SESIÓN -->
+                        <div>
+                            <label for="filter-dia" class="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
+                                <span>2. Día Semana / Sesión</span>
+                                <span id="dia-count-label" class="text-[11px] font-mono font-medium text-slate-400"></span>
+                            </label>
+                            <select id="filter-dia" onchange="renderDashboard()" class="w-full bg-slate-50 hover:bg-white border border-slate-300 focus:border-cobalt-600 focus:ring-2 focus:ring-cobalt-600/15 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 outline-none transition cursor-pointer">
+                                <option value="ALL">Todos los días del microciclo</option>
+                            </select>
+                        </div>
+
+                        <!-- Desplegable 3: JUGADOR -->
+                        <div>
+                            <label for="filter-jugador" class="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
+                                <span>3. Jugador / Plantilla</span>
+                                <span id="jugador-count-label" class="text-[11px] font-bold text-slate-400"></span>
+                            </label>
+                            <select id="filter-jugador" onchange="renderDashboard()" class="w-full bg-slate-50 hover:bg-white border border-slate-300 focus:border-cobalt-600 focus:ring-2 focus:ring-cobalt-600/15 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 outline-none transition cursor-pointer">
+                                <option value="ALL">Toda la plantilla</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Botones de Exportación y Gestión -->
+                    <div class="flex flex-wrap items-center gap-2.5 pt-2 lg:pt-0">
+                        <button onclick="exportExcelBackup()" class="px-4 py-2.5 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm transition">
+                            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            <span>Exportar Copia (.xlsx)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4 TARJETAS KPI PRINCIPALES -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                
+                <!-- KPI 1: Carga Total / Media del Microciclo (UA) -->
+                <div class="card-surface rounded-2xl p-5 flex flex-col justify-between">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span id="kpi1-title" class="text-xs font-extrabold uppercase tracking-wider text-slate-400">Carga Media / Jugador</span>
+                            <div class="flex items-baseline gap-2 mt-1.5">
+                                <h3 id="kpi-ua-main" class="text-3xl font-extrabold text-slate-900 font-mono">0</h3>
+                                <span class="text-xs font-bold text-slate-500">UA</span>
+                            </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-xl bg-cobalt-50 text-cobalt-600 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span class="text-slate-500">Carga acumulada equipo:</span>
+                        <span id="kpi-ua-team-total" class="font-mono font-bold text-slate-800">0 UA</span>
+                    </div>
+                </div>
+
+                <!-- KPI 2: RPE Medio y Minutos Totales -->
+                <div class="card-surface rounded-2xl p-5 flex flex-col justify-between">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-extrabold uppercase tracking-wider text-slate-400">RPE Medio Selección</span>
+                            <div class="flex items-baseline gap-2 mt-1.5">
+                                <h3 id="kpi-rpe-avg" class="text-3xl font-extrabold text-slate-900 font-mono">0.0</h3>
+                                <span class="text-xs font-bold text-slate-500">/ 10</span>
+                            </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span class="text-slate-500">Minutos totales (media):</span>
+                        <span id="kpi-minutes-info" class="font-mono font-bold text-sky-700">0 min (0'/jug)</span>
+                    </div>
+                </div>
+
+                <!-- KPI 3: Ratio Agudo:Crónico (ACWR - 4 microciclos previos) -->
+                <div class="card-surface rounded-2xl p-5 flex flex-col justify-between">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-extrabold uppercase tracking-wider text-slate-400">Ratio Agudo:Crónico</span>
+                            <div class="flex items-center gap-2.5 mt-1.5">
+                                <h3 id="kpi-acwr-val" class="text-3xl font-extrabold text-slate-900 font-mono">0.00</h3>
+                                <span id="kpi-acwr-badge" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800">Óptimo</span>
+                            </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span id="kpi-chronic-label" class="text-slate-500">Crónica (4 sem. previas):</span>
+                        <span id="kpi-chronic-val" class="font-mono font-bold text-slate-800">0 UA</span>
+                    </div>
+                </div>
+
+                <!-- KPI 4: Alertas Activas de Molestias -->
+                <div class="card-surface rounded-2xl p-5 flex flex-col justify-between cursor-pointer hover:border-rose-300 transition" onclick="switchTab('alerts')">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-extrabold uppercase tracking-wider text-slate-400">Alertas de Molestias</span>
+                            <div class="flex items-baseline gap-2 mt-1.5">
+                                <h3 id="kpi-molestias-count" class="text-3xl font-extrabold text-rose-600 font-mono">0</h3>
+                                <span class="text-xs font-bold text-slate-500">jugadores con "Sí"</span>
+                            </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span class="text-slate-500">Grado máximo reportado:</span>
+                        <span id="kpi-molestias-max" class="font-mono font-bold text-rose-700">0 / 10 &rarr; Ver</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- GRÁFICOS INTERACTIVOS (CHART.JS) -->
+            <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                
+                <!-- Gráfico 1: Evolución Semanal de Carga (UA) vs Ratio Agudo:Crónico (7 cols) -->
+                <div class="xl:col-span-7 card-surface rounded-2xl p-5 flex flex-col">
+                    <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
+                        <div>
+                            <h2 class="text-base font-extrabold text-slate-900">Evolución Semanal: Carga (UA) vs. Ratio Agudo:Crónico</h2>
+                            <p id="chart1-subtitle" class="text-xs text-slate-500">Barras = Carga semanal (UA) · Línea = Ratio ACWR (Zona óptima: 0.80 - 1.30)</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2.5 text-[11px] font-bold">
+                            <span class="flex items-center gap-1.5 text-slate-600"><span class="w-2.5 h-2.5 rounded-xs bg-cobalt-600"></span> Carga (UA)</span>
+                            <span class="flex items-center gap-1.5 text-slate-600"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> ACWR</span>
+                            <span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Óptimo: 0.80 - 1.30</span>
+                        </div>
+                    </div>
+                    <div class="relative flex-1 min-h-[320px] w-full">
+                        <canvas id="weeklyEvolutionChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Gráfico 2: Barras Horizontales por Jugador en Microciclo Seleccionado (5 cols) -->
+                <div class="xl:col-span-5 card-surface rounded-2xl p-5 flex flex-col">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                        <div>
+                            <h2 class="text-base font-extrabold text-slate-900">Carga (UA) & Riesgo ACWR por Jugador</h2>
+                            <p class="text-xs text-slate-500">Coloreado según el semáforo de Ratio Agudo:Crónico del microciclo</p>
+                        </div>
+                        <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600">Tooltip con ACWR exacto</span>
+                    </div>
+                    <div class="relative flex-1 min-h-[320px] w-full">
+                        <canvas id="squadComparisonChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TABLA DETALLADA DE REGISTROS FILTRADOS (CON EDICIÓN EN VIVO) -->
+            <div class="card-surface rounded-2xl overflow-hidden">
+                <div class="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white">
+                    <div>
+                        <div class="flex items-center gap-2.5">
+                            <h2 class="text-base font-extrabold text-slate-900">Registros Detallados de la Selección</h2>
+                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cobalt-50 text-cobalt-700 border border-cobalt-200">Edición en vivo de Minutos y RPE</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            Modifica directamente <strong>MINUTOS</strong> o <strong>RPE</strong> en cualquier fila para recalcular al instante las <strong>UA</strong> y el <strong>Ratio Agudo:Crónico</strong>.
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+                        <span class="px-2 py-1 rounded-md bg-sky-50 text-sky-700 border border-sky-200">&lt; 0.80 Infracarga</span>
+                        <span class="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">0.80 - 1.30 Óptimo</span>
+                        <span class="px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200">1.31 - 1.50 Precaución</span>
+                        <span class="px-2 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-200">&gt; 1.50 Alto Riesgo</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto max-h-[540px]">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="sticky top-0 z-10">
+                            <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                                <th class="py-3.5 px-4">Fecha</th>
+                                <th class="py-3.5 px-3">Día Semana</th>
+                                <th class="py-3.5 px-3">Microciclo</th>
+                                <th class="py-3.5 px-4">Jugador</th>
+                                <th class="py-3.5 px-3 text-center">Minutos</th>
+                                <th class="py-3.5 px-3 text-center">RPE</th>
+                                <th class="py-3.5 px-3 text-right">UA</th>
+                                <th class="py-3.5 px-3 text-center bg-cobalt-50/50 text-cobalt-900">ACWR (Sem)</th>
+                                <th class="py-3.5 px-3 text-center">Molestias</th>
+                                <th class="py-3.5 px-4 text-center">Grado Molestias</th>
+                            </tr>
+                        </thead>
+                        <tbody id="records-table-body" class="divide-y divide-slate-100 text-sm">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ===================================================================== -->
+        <!-- PESTAÑA 2: ALERTAS MÉDICO-FÍSICAS (MOLESTIAS + ACWR)                  -->
+        <!-- ===================================================================== -->
+        <section id="view-alerts" class="hidden space-y-6">
+            
+            <div class="card-elevated rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-700 text-xs font-extrabold uppercase tracking-wider">Pre-Sesión Cuerpo Técnico</span>
+                        <h2 class="text-xl font-extrabold text-slate-900">Alertas Médico-Físicas: Molestias & Ratio ACWR</h2>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-1">
+                        Diagnóstico automático del <strong id="alerts-microciclo-title" class="text-slate-900">Microciclo 6</strong> para decidir reducciones de volumen, trabajo preventivo o compensaciones.
+                    </p>
+                </div>
+                <button onclick="exportExcelBackup()" class="px-5 py-3 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-sm font-bold flex items-center gap-2 shadow-md shrink-0 transition">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    <span>Exportar Informe (.xlsx)</span>
+                </button>
+            </div>
+
+            <!-- BLOQUE 1: JUGADORES CON MOLESTIAS = "Sí" ORDENADOS POR GRADO DE MOLESTIAS -->
+            <div class="card-surface rounded-2xl overflow-hidden border-t-4 border-t-rose-600">
+                <div class="p-5 bg-rose-50/60 border-b border-rose-100 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-3 h-3 rounded-full bg-rose-600 animate-pulse"></span>
+                        <h3 class="text-base font-extrabold text-rose-950">Bloque 1: Jugadores con Molestias Reportadas (Ordenados por Grado)</h3>
+                    </div>
+                    <span id="badge-total-molestias" class="px-3 py-1 rounded-full bg-rose-600 text-white font-mono text-xs font-bold">0 reportes</span>
+                </div>
+                <div id="molestias-cards-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                </div>
+            </div>
+
+            <!-- BLOQUE 2: SEMÁFORO DE RATIO AGUDO:CRÓNICO (ACWR) DE TODA LA PLANTILLA -->
+            <div>
+                <h3 class="text-base font-extrabold text-slate-900 mb-3 flex items-center gap-2">
+                    <span class="w-2 h-5 rounded-full bg-cobalt-600"></span>
+                    Bloque 2: Semáforo de Ratio Agudo:Crónico (ACWR) de la Plantilla
+                </h3>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <!-- Bandera Roja (> 1.50 o < 0.80) -->
+                    <div class="card-surface rounded-2xl overflow-hidden border-t-4 border-t-rose-600">
+                        <div class="p-4 bg-rose-50/70 border-b border-rose-100 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-rose-600"></span>
+                                <h4 class="font-extrabold text-rose-950 text-sm">Bandera Roja (&gt; 1.50 o &lt; 0.80)</h4>
+                            </div>
+                            <span id="count-acwr-red" class="px-2.5 py-0.5 rounded-full bg-rose-600 text-white font-mono text-xs font-bold">0</span>
+                        </div>
+                        <div id="list-acwr-red" class="p-4 space-y-3"></div>
+                    </div>
+
+                    <!-- Precaución (1.30 - 1.50) -->
+                    <div class="card-surface rounded-2xl overflow-hidden border-t-4 border-t-amber-500">
+                        <div class="p-4 bg-amber-50/70 border-b border-amber-100 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                                <h4 class="font-extrabold text-amber-950 text-sm">Precaución (1.30 - 1.50)</h4>
+                            </div>
+                            <span id="count-acwr-amber" class="px-2.5 py-0.5 rounded-full bg-amber-500 text-white font-mono text-xs font-bold">0</span>
+                        </div>
+                        <div id="list-acwr-amber" class="p-4 space-y-3"></div>
+                    </div>
+
+                    <!-- Zona Óptima (0.80 - 1.30) -->
+                    <div class="card-surface rounded-2xl overflow-hidden border-t-4 border-t-emerald-500">
+                        <div class="p-4 bg-emerald-50/70 border-b border-emerald-100 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                <h4 class="font-extrabold text-emerald-950 text-sm">Zona Óptima (0.80 - 1.30)</h4>
+                            </div>
+                            <span id="count-acwr-green" class="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white font-mono text-xs font-bold">0</span>
+                        </div>
+                        <div id="list-acwr-green" class="p-4 space-y-3"></div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- ===================================================================== -->
+        <!-- PESTAÑA 3: GESTIÓN DE DATOS (GOOGLE SHEETS / EXCEL / MANUAL)          -->
+        <!-- ===================================================================== -->
+        <section id="view-data" class="hidden space-y-6">
+
+            <!-- Guía Rápida 3 Pasos Google Sheets + Vercel -->
+            <div class="card-elevated rounded-2xl p-6 bg-gradient-to-r from-navy-900 to-slate-800 text-white">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
+                    <div>
+                        <span class="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-extrabold uppercase tracking-wider">Flujo Automatizado</span>
+                        <h2 class="text-xl font-extrabold mt-1.5">Cómo conectar tu pestaña Report_App de Google Sheets</h2>
+                    </div>
+                    <button onclick="downloadVercelIndexHTML()" class="px-4 py-2.5 rounded-xl bg-cobalt-600 hover:bg-cobalt-500 text-white text-xs sm:text-sm font-extrabold flex items-center gap-2 shadow-lg shrink-0 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        <span>Descargar index.html para Vercel</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <div class="bg-slate-950/60 border border-slate-700/80 rounded-xl p-4">
+                        <span class="font-mono font-extrabold text-emerald-400 text-sm">PASO 1</span>
+                        <h3 class="font-bold text-white text-sm mt-1">Publicar pestaña en Google Sheets</h3>
+                        <p class="text-slate-300 mt-1.5 leading-relaxed">En tu Google Sheets, ve a <strong>Archivo &gt; Compartir &gt; Publicar en la web</strong>. Selecciona solo tu pestaña <strong>Report_App</strong> y elige el formato <strong>Valores separados por comas (.csv)</strong>.</p>
+                    </div>
+                    <div class="bg-slate-950/60 border border-slate-700/80 rounded-xl p-4">
+                        <span class="font-mono font-extrabold text-sky-400 text-sm">PASO 2</span>
+                        <h3 class="font-bold text-white text-sm mt-1">Pegar URL y Sincronizar</h3>
+                        <p class="text-slate-300 mt-1.5 leading-relaxed">Pega el enlace en la barra superior de esta app y pulsa <strong>Sincronizar Ahora</strong>. La app reconoce automáticamente tus 9 columnas exactas.</p>
+                    </div>
+                    <div class="bg-slate-950/60 border border-slate-700/80 rounded-xl p-4">
+                        <span class="font-mono font-extrabold text-amber-400 text-sm">PASO 3</span>
+                        <h3 class="font-bold text-white text-sm mt-1">Subir a Vercel en 1 minuto</h3>
+                        <p class="text-slate-300 mt-1.5 leading-relaxed">Descarga el archivo <strong>index.html</strong> con el botón de arriba, mételo en una carpeta y súbelo a <strong>Vercel</strong> para tener tu URL fija en móvil y ordenador.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Columna Izquierda: Importador Excel/CSV y Control de Datos (7 cols) -->
+                <div class="lg:col-span-7 card-surface rounded-2xl p-6 space-y-5">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                        <div>
+                            <h2 class="text-lg font-extrabold text-slate-900">Importar Archivo Excel (.xlsx) o CSV Local</h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Compatible con las 9 columnas exactas de tu Report_App.</p>
+                        </div>
+                        <button onclick="downloadExcelTemplate9Cols()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-sm shrink-0 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            <span>Plantilla Excel (9 Columnas)</span>
+                        </button>
+                    </div>
+
+                    <!-- Dropzone -->
+                    <div id="excel-dropzone" class="border-2 border-dashed border-slate-300 hover:border-cobalt-600 bg-slate-50/70 hover:bg-cobalt-50/30 rounded-2xl p-7 text-center transition cursor-pointer">
+                        <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" class="hidden">
+                        <div class="w-12 h-12 rounded-2xl bg-cobalt-100 text-cobalt-600 flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                        </div>
+                        <p class="text-sm font-extrabold text-slate-800">Arrastra aquí tu archivo .xlsx o .csv</p>
+                        <p class="text-xs text-slate-500 mt-1">o haz clic para seleccionarlo desde tu equipo</p>
+                        <div class="mt-4 flex flex-wrap justify-center gap-1.5 text-[11px] font-mono text-slate-600">
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">FECHA</span>
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">DIA SEMANA</span>
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">JUGADOR</span>
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">RPE</span>
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">MOLESTIAS</span>
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">GRADO DE MOLESTIAS</span>
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">MICROCICLO</span>
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">MINUTOS</span>
+                            <span class="px-2 py-0.5 bg-white border border-slate-200 rounded">UA</span>
+                        </div>
+                    </div>
+
+                    <!-- Vista Previa Importación -->
+                    <div id="import-preview-box" class="hidden space-y-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <h3 class="text-sm font-extrabold text-slate-900" id="preview-filename">Archivo listo</h3>
+                                <p class="text-xs text-slate-600" id="preview-summary">0 registros detectados</p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="confirmImportRows('append')" class="px-3.5 py-2 rounded-xl bg-cobalt-600 hover:bg-cobalt-700 text-white text-xs font-bold transition">+ Añadir a los actuales</button>
+                                <button onclick="confirmImportRows('replace')" class="px-3.5 py-2 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-xs font-bold transition">Reemplazar todo</button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto max-h-44 border border-slate-200 rounded-xl bg-white">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                                    <tr>
+                                        <th class="p-2">Fecha</th>
+                                        <th class="p-2">Microciclo</th>
+                                        <th class="p-2">Día</th>
+                                        <th class="p-2">Jugador</th>
+                                        <th class="p-2 text-center">Min</th>
+                                        <th class="p-2 text-center">RPE</th>
+                                        <th class="p-2 text-right">UA</th>
+                                        <th class="p-2 text-center">Molestias</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="import-preview-tbody" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Botones de Limpieza / Demo -->
+                    <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                        <span class="text-xs text-slate-500">Registros en memoria: <strong id="storage-total-count" class="text-slate-900">0</strong></span>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="resetToDemoData()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition">
+                                Cargar Demo (6 Microciclos)
+                            </button>
+                            <button onclick="confirmClearAllData()" class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition">
+                                Borrar datos demo / Empezar limpio
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha: Añadir Fila Manual Rápida (5 cols) -->
+                <div class="lg:col-span-5 card-surface rounded-2xl p-6">
+                    <div class="border-b border-slate-100 pb-4 mb-5">
+                        <h2 class="text-lg font-extrabold text-slate-900">Añadir Fila Manual Rápida</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Para registrar un dato puntual de sesión o partido sin abrir Excel.</p>
+                    </div>
+
+                    <form id="manual-entry-form" onsubmit="handleManualEntrySubmit(event)" class="space-y-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">FECHA</label>
+                                <input type="date" id="form-fecha" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-medium outline-none focus:border-cobalt-600">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">MICROCICLO</label>
+                                <input type="text" id="form-microciclo" value="Microciclo 6" placeholder="Ej. Microciclo 7" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-cobalt-600">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">DIA SEMANA</label>
+                                <input type="text" id="form-dia" list="dias-datalist" value="MD-3" placeholder="Ej. MD-3 o Miércoles" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-cobalt-600">
+                                <datalist id="dias-datalist">
+                                    <option value="MD-4">
+                                    <option value="MD-3">
+                                    <option value="MD-2">
+                                    <option value="MD-1">
+                                    <option value="MD">
+                                    <option value="MD+1">
+                                </datalist>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">JUGADOR</label>
+                                <input type="text" id="form-jugador" list="players-datalist" placeholder="Nombre del jugador" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-cobalt-600">
+                                <datalist id="players-datalist"></datalist>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-3 bg-cobalt-50/60 p-3 rounded-xl border border-cobalt-100">
+                            <div>
+                                <label class="block text-[11px] font-extrabold text-cobalt-900 mb-1">MINUTOS</label>
+                                <input type="number" id="form-minutos" min="0" max="150" value="75" oninput="updateFormUAPreview()" required class="w-full bg-white border border-cobalt-200 rounded-lg px-2.5 py-1.5 text-sm font-mono font-bold text-center outline-none focus:border-cobalt-600">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-extrabold text-cobalt-900 mb-1">RPE (1-10)</label>
+                                <input type="number" id="form-rpe" min="0" max="10" step="0.5" value="7" oninput="updateFormUAPreview()" required class="w-full bg-white border border-cobalt-200 rounded-lg px-2.5 py-1.5 text-sm font-mono font-bold text-center outline-none focus:border-cobalt-600">
+                            </div>
+                            <div class="flex flex-col justify-center items-center">
+                                <span class="text-[10px] font-bold uppercase text-cobalt-700">UA (Auto)</span>
+                                <span id="form-ua-preview" class="text-lg font-extrabold font-mono text-cobalt-700">525</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">MOLESTIAS</label>
+                                <select id="form-molestias" onchange="toggleFormGradoMolestias()" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-cobalt-600">
+                                    <option value="No">No</option>
+                                    <option value="Sí">Sí</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">GRADO DE MOLESTIAS (0-10)</label>
+                                <input type="number" id="form-grado-molestias" min="0" max="10" value="0" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-bold text-center outline-none focus:border-cobalt-600">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full py-3 rounded-xl bg-cobalt-600 hover:bg-cobalt-700 text-white font-extrabold text-sm shadow-md shadow-cobalt-600/20 transition">
+                            Guardar Registro en la App
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-slate-200 bg-white py-4 mt-8">
+        <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+            <span><strong>LoadControl Elite v1.0</strong> &bull; Control de Carga (sRPE), Molestias y Ratio Agudo:Crónico</span>
+            <span>Fórmula ACWR: Carga Aguda (Microciclo N) / Media Carga Crónica (4 Microciclos previos)</span>
+        </div>
+    </footer>
+
+    <!-- ========================================================================= -->
+    <!-- LÓGICA DE DATOS, GOOGLE SHEETS CSV, EXCEL Y CÁLCULO ACWR                  -->
+    <!-- ========================================================================= -->
+    <script>
+        const STORAGE_RECORDS_KEY = 'loadcontrol_v1_records';
+        const STORAGE_GSHEETS_URL_KEY = 'loadcontrol_v1_gsheets_url';
+
+        let allRecords = [];
+        let pendingImportRecords = [];
+        let weeklyChartInstance = null;
+        let squadChartInstance = null;
+
+        // 1. DATOS DE EJEMPLO REALISTAS (6 MICROCICLOS COMPLETOS, 12 JUGADORES, 9 COLUMNAS EXACTAS)
+        const DEMO_PLAYERS = [
+            { name: 'Álex Remiro', profile: 'gk' },
+            { name: 'Dani Carvajal', profile: 'regular' },
+            { name: 'Robin Le Normand', profile: 'regular' },
+            { name: 'Pau Cubarsí', profile: 'regular' },
+            { name: 'Álex Grimaldo', profile: 'caution' },
+            { name: 'Rodri Hernández', profile: 'regular' },
+            { name: 'Fabián Ruiz', profile: 'regular' },
+            { name: 'Dani Olmo', profile: 'spike_pain' },      // ACWR > 1.50 + Molestia grado 7
+            { name: 'Lamine Yamal', profile: 'mild_pain' },    // ACWR ~ 1.36 + Molestia grado 4
+            { name: 'Nico Williams', profile: 'regular' },
+            { name: 'Álvaro Morata', profile: 'underload' },   // ACWR < 0.75 (infracarga)
+            { name: 'Mikel Oyarzabal', profile: 'regular' }
+        ];
+
+        function generateDemoData6Microciclos() {
+            const sessions = [
+                { dia: 'MD-4', offset: 1, min: 75, rpe: 7.5 },
+                { dia: 'MD-3', offset: 2, min: 85, rpe: 8.5 },
+                { dia: 'MD-2', offset: 3, min: 60, rpe: 5.5 },
+                { dia: 'MD-1', offset: 4, min: 45, rpe: 4.5 },
+                { dia: 'MD',   offset: 6, min: 90, rpe: 9.0 }
+            ];
+
+            const records = [];
+            let idCounter = 1;
+            const baseMonday = new Date('2026-10-05');
+
+            for (let mc = 1; mc <= 6; mc++) {
+                const microcicloLabel = `Microciclo ${mc}`;
+                sessions.forEach(sess => {
+                    const d = new Date(baseMonday);
+                    d.setDate(baseMonday.getDate() + (mc - 1) * 7 + sess.offset);
+                    const fechaStr = d.toISOString().split('T')[0];
+
+                    DEMO_PLAYERS.forEach((p, idx) => {
+                        let min = sess.min;
+                        let rpe = sess.rpe;
+                        let molestias = 'No';
+                        let grado = 0;
+
+                        if (p.profile === 'gk') {
+                            rpe = Math.max(3, rpe - 1.5);
+                        }
+
+                        // Escenarios realistas en Microciclo 6
+                        if (mc === 6) {
+                            if (p.profile === 'spike_pain') {
+                                min = Math.round(min * 1.32);
+                                rpe = Math.min(10, rpe + 1.2);
+                                if (sess.dia === 'MD-1' || sess.dia === 'MD') {
+                                    molestias = 'Sí';
+                                    grado = sess.dia === 'MD' ? 7 : 5;
+                                }
+                            } else if (p.profile === 'caution') {
+                                min = Math.round(min * 1.18);
+                                rpe = Math.min(10, rpe + 0.8);
+                            } else if (p.profile === 'mild_pain') {
+                                if (sess.dia === 'MD-2' || sess.dia === 'MD') {
+                                    molestias = 'Sí';
+                                    grado = 4;
+                                }
+                            } else if (p.profile === 'underload') {
+                                min = sess.dia === 'MD' ? 25 : Math.round(min * 0.65);
+                                rpe = Math.max(3, rpe - 1.0);
+                            }
+                        } else if (mc <= 5 && p.profile === 'spike_pain' && sess.dia === 'MD') {
+                            min = 35; // Menos minutos previos para simular pico de carga en Microciclo 6
+                        }
+
+                        const jitter = ((idx + mc) % 3 - 1) * 0.2;
+                        rpe = Number(Math.min(10, Math.max(1, rpe + jitter)).toFixed(1));
+                        const ua = Math.round(min * rpe);
+
+                        records.push({
+                            id: `demo_${idCounter++}`,
+                            FECHA: fechaStr,
+                            DIA_SEMANA: sess.dia,
+                            JUGADOR: p.name,
+                            RPE: rpe,
+                            MOLESTIAS: molestias,
+                            GRADO_MOLESTIAS: grado,
+                            MICROCICLO: microcicloLabel,
+                            MINUTOS: min,
+                            UA: ua
+                        });
+                    });
+                });
+            }
+            return records;
+        }
+
+        // 2. INICIALIZACIÓN Y PERSISTENCIA
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('form-fecha').valueAsDate = new Date();
+            const savedUrl = localStorage.getItem(STORAGE_GSHEETS_URL_KEY);
+            if (savedUrl) {
+                document.getElementById('gsheets-url-input').value = savedUrl;
+            }
+
+            loadRecordsFromStorage();
+            setupDragAndDrop();
+            populateAllDropdowns();
+            renderDashboard();
+
+            // Si hay URL guardada de Google Sheets, sincronizar silenciosamente al abrir
+            if (savedUrl) {
+                syncGoogleSheetsNow(true);
+            }
+        });
+
+        function loadRecordsFromStorage() {
+            const raw = localStorage.getItem(STORAGE_RECORDS_KEY);
+            if (!raw) {
+                allRecords = generateDemoData6Microciclos();
+                saveRecordsToStorage();
+            } else {
+                try {
+                    allRecords = JSON.parse(raw) || [];
+                } catch (e) {
+                    allRecords = [];
+                }
+            }
+            updateRecordCountUI();
+        }
+
+        function saveRecordsToStorage() {
+            localStorage.setItem(STORAGE_RECORDS_KEY, JSON.stringify(allRecords));
+            updateRecordCountUI();
+        }
+
+        function updateRecordCountUI() {
+            document.getElementById('mobile-records-count').textContent = `${allRecords.length} reg.`;
+            document.getElementById('storage-total-count').textContent = `${allRecords.length} registros`;
+        }
+
+        // 3. NORMALIZACIÓN DE FILAS (TOLERANTE A MAYÚSCULAS, TILDES Y ESPACIOS)
+        function normalizeRowObject(rawRow, index = 0) {
+            const normalizedMap = {};
+            Object.keys(rawRow).forEach(key => {
+                const cleanKey = String(key)
+                    .toUpperCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/\s+/g, '_')
+                    .trim();
+                normalizedMap[cleanKey] = rawRow[key];
+            });
+
+            const pick = (candidates) => {
+                for (const c of candidates) {
+                    if (normalizedMap[c] !== undefined && normalizedMap[c] !== '') {
+                        return normalizedMap[c];
+                    }
+                }
+                return '';
+            };
+
+            const parseNum = (val) => {
+                if (typeof val === 'number') return val;
+                if (!val) return 0;
+                const cleaned = String(val).replace(',', '.').replace(/[^0-9.-]/g, '');
+                return Number(cleaned) || 0;
+            };
+
+            const fecha = String(pick(['FECHA', 'DATE']) || new Date().toISOString().split('T')[0]).trim();
+            const diaSemana = String(pick(['DIA_SEMANA', 'DIASEMANA', 'DIA', 'SESION']) || 'MD-3').trim();
+            const jugador = String(pick(['JUGADOR', 'NOMBRE', 'PLAYER']) || '').trim();
+            const rpe = parseNum(pick(['RPE', 'SRPE']));
+            const rawMol = String(pick(['MOLESTIAS', 'MOLESTIA']) || 'No').trim();
+            const molestiasNorm = /^s[ií]/i.test(rawMol) ? 'Sí' : 'No';
+            const gradoMolestias = parseNum(pick(['GRADO_DE_MOLESTIAS', 'GRADO_MOLESTIAS', 'GRADOMOLESTIAS', 'GRADO']));
+            const rawMicro = String(pick(['MICROCICLO', 'SEMANA', 'WEEK']) || 'Microciclo 1').trim();
+            const microciclo = /^\d+$/.test(rawMicro) ? `Microciclo ${rawMicro}` : rawMicro;
+            const minutos = parseNum(pick(['MINUTOS', 'MIN', 'MINUTES']));
+            const rawUa = parseNum(pick(['UA', 'CARGA', 'LOAD']));
+            const ua = rawUa > 0 ? Math.round(rawUa) : Math.round(minutos * rpe);
+
+            return {
+                id: `rec_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 4)}`,
+                FECHA: fecha,
+                DIA_SEMANA: diaSemana,
+                JUGADOR: jugador,
+                RPE: rpe,
+                MOLESTIAS: molestiasNorm,
+                GRADO_MOLESTIAS: gradoMolestias,
+                MICROCICLO: microciclo,
+                MINUTOS: minutos,
+                UA: ua
+            };
+        }
+
+        // 4. CONEXIÓN DIRECTA CON GOOGLE SHEETS (CSV PUBLICADO)
+        function syncGoogleSheetsNow(isSilent = false) {
+            const urlInput = document.getElementById('gsheets-url-input');
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                if (!isSilent) {
+                    showToast('Pega primero tu enlace CSV publicado de Google Sheets en la barra superior.', '#F59E0B');
+                    urlInput.focus();
+                }
+                return;
+            }
+
+            localStorage.setItem(STORAGE_GSHEETS_URL_KEY, url);
+            const spinner = document.getElementById('sync-spinner-icon');
+            spinner.classList.add('animate-spin');
+
+            // Añadimos parámetro cache-buster para obtener siempre la última versión de Google Sheets
+            const fetchUrl = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+
+            Papa.parse(fetchUrl, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    spinner.classList.remove('animate-spin');
+                    if (!results.data || results.data.length === 0) {
+                        if (!isSilent) showToast('La hoja de Google Sheets no devolvió filas válidas.', '#EF4444');
+                        return;
+                    }
+
+                    const parsed = results.data
+                        .map((row, idx) => normalizeRowObject(row, idx))
+                        .filter(r => r.JUGADOR !== '');
+
+                    if (parsed.length === 0) {
+                        if (!isSilent) showToast('No se detectó la columna JUGADOR en el CSV.', '#EF4444');
+                        return;
+                    }
+
+                    allRecords = parsed;
+                    saveRecordsToStorage();
+                    populateAllDropdowns();
+                    renderDashboard();
+                    if (!document.getElementById('view-alerts').classList.contains('hidden')) {
+                        renderAlertsView();
+                    }
+
+                    const nowTime = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                    document.getElementById('last-sync-label').textContent = `Sincronizado ${nowTime} (${parsed.length} reg.)`;
+                    document.getElementById('gsheets-status-dot').className = 'w-2 h-2 rounded-full bg-emerald-400';
+                    document.getElementById('mobile-sync-dot').className = 'w-2 h-2 rounded-full bg-emerald-400';
+
+                    if (!isSilent) {
+                        showToast(`Google Sheets sincronizado: ${parsed.length} registros actualizados.`, '#10B981');
+                    }
+                },
+                error: function() {
+                    spinner.classList.remove('animate-spin');
+                    document.getElementById('gsheets-status-dot').className = 'w-2 h-2 rounded-full bg-rose-500';
+                    if (!isSilent) {
+                        showToast('Error al conectar con Google Sheets. Verifica que esté publicado como CSV en la web.', '#EF4444');
+                    }
+                }
+            });
+        }
+
+        // 5. NAVEGACIÓN ENTRE LAS 3 PESTAÑAS
+        function switchTab(tabId) {
+            ['dashboard', 'alerts', 'data'].forEach(t => {
+                const view = document.getElementById(`view-${t}`);
+                const btn = document.getElementById(`nav-tab-${t}`);
+                if (t === tabId) {
+                    view.classList.remove('hidden');
+                    btn.className = 'nav-tab flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition bg-cobalt-600 text-white shadow-sm';
+                } else {
+                    view.classList.add('hidden');
+                    btn.className = 'nav-tab flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition';
+                }
+            });
+
+            if (tabId === 'dashboard') renderDashboard();
+            if (tabId === 'alerts') renderAlertsView();
+        }
+
+        // 6. ORDENACIÓN Y POBLACIÓN DE DESPLEGABLES SINCRONIZADOS
+        function extractMicrocicloNumber(mcStr) {
+            const match = String(mcStr).match(/(\d+)/);
+            return match ? Number(match[1]) : 0;
+        }
+
+        function getOrderedMicrociclos() {
+            const unique = [...new Set(allRecords.map(r => r.MICROCICLO).filter(Boolean))];
+            return unique.sort((a, b) => {
+                const nA = extractMicrocicloNumber(a);
+                const nB = extractMicrocicloNumber(b);
+                if (nA !== nB) return nA - nB; // Ascendente: Microciclo 1, 2, 3...
+                return a.localeCompare(b);
+            });
+        }
+
+        function populateAllDropdowns() {
+            const mcSelect = document.getElementById('filter-microciclo');
+            const playerSelect = document.getElementById('filter-jugador');
+            const datalist = document.getElementById('players-datalist');
+
+            const prevMc = mcSelect.value;
+            const prevPlayer = playerSelect.value;
+
+            const orderedMcs = getOrderedMicrociclos();
+            mcSelect.innerHTML = '';
+
+            if (orderedMcs.length === 0) {
+                mcSelect.innerHTML = '<option value="">Sin microciclos cargados</option>';
+            } else {
+                // Mostrar el más reciente primero en el desplegable
+                [...orderedMcs].reverse().forEach(mc => {
+                    const opt = document.createElement('option');
+                    opt.value = mc;
+                    opt.textContent = mc;
+                    mcSelect.appendChild(opt);
+                });
+                if (orderedMcs.includes(prevMc)) {
+                    mcSelect.value = prevMc;
+                } else {
+                    mcSelect.value = orderedMcs[orderedMcs.length - 1];
+                }
+            }
+
+            const players = [...new Set(allRecords.map(r => r.JUGADOR).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+            playerSelect.innerHTML = '<option value="ALL">Toda la plantilla (' + players.length + ' jugadores)</option>';
+            datalist.innerHTML = '';
+
+            players.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                playerSelect.appendChild(opt);
+
+                const dOpt = document.createElement('option');
+                dOpt.value = p;
+                datalist.appendChild(dOpt);
+            });
+
+            if (players.includes(prevPlayer)) {
+                playerSelect.value = prevPlayer;
+            }
+
+            populateDiaDropdownForMicrociclo();
+        }
+
+        function onMicrocicloChange() {
+            populateDiaDropdownForMicrociclo();
+            renderDashboard();
+        }
+
+        function populateDiaDropdownForMicrociclo() {
+            const selectedMc = document.getElementById('filter-microciclo').value;
+            const diaSelect = document.getElementById('filter-dia');
+            const prevDia = diaSelect.value;
+
+            const mcRecords = allRecords.filter(r => r.MICROCICLO === selectedMc);
+            const dayOrder = { 'MD+1': 1, 'MD-5': 2, 'MD-4': 3, 'MD-3': 4, 'MD-2': 5, 'MD-1': 6, 'MD': 7, 'LUNES': 1, 'MARTES': 2, 'MIERCOLES': 3, 'JUEVES': 4, 'VIERNES': 5, 'SABADO': 6, 'DOMINGO': 7 };
+
+            const uniqueDias = [...new Set(mcRecords.map(r => r.DIA_SEMANA).filter(Boolean))].sort((a, b) => {
+                const kA = a.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const kB = b.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return (dayOrder[kA] || 50) - (dayOrder[kB] || 50);
+            });
+
+            diaSelect.innerHTML = '<option value="ALL">Todos los días del microciclo</option>';
+            uniqueDias.forEach(d => {
+                const sample = mcRecords.find(r => r.DIA_SEMANA === d);
+                const dateInfo = sample && sample.FECHA ? ` (${sample.FECHA})` : '';
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = `${d}${dateInfo}`;
+                diaSelect.appendChild(opt);
+            });
+
+            if (uniqueDias.includes(prevDia)) {
+                diaSelect.value = prevDia;
+            }
+
+            const dates = mcRecords.map(r => r.FECHA).filter(Boolean).sort();
+            document.getElementById('microciclo-dates-label').textContent = dates.length > 0 ? `${dates[0]} → ${dates[dates.length - 1]}` : '';
+            document.getElementById('dia-count-label').textContent = `${uniqueDias.length} sesiones`;
+        }
+
+        // 7. MOTOR DE CÁLCULO ACWR ESTRICTO (4 MICROCICLOS ANTERIORES)
+        function calculatePlayerACWR(playerName, targetMicrociclo) {
+            const orderedMcs = getOrderedMicrociclos();
+            const targetIndex = orderedMcs.indexOf(targetMicrociclo);
+
+            // Carga Aguda = Suma UA del jugador en el microciclo seleccionado
+            const acuteLoad = allRecords
+                .filter(r => r.JUGADOR === playerName && r.MICROCICLO === targetMicrociclo)
+                .reduce((sum, r) => sum + Number(r.UA || 0), 0);
+
+            if (targetIndex <= 0) {
+                return {
+                    acuteLoad,
+                    chronicLoad: acuteLoad,
+                    acwr: acuteLoad > 0 ? 1.00 : 0,
+                    prevWeeksAvailable: 0
+                };
+            }
+
+            // Tomar hasta los 4 microciclos anteriores disponibles
+            const startIdx = Math.max(0, targetIndex - 4);
+            const prevMicrociclos = orderedMcs.slice(startIdx, targetIndex);
+
+            const sumPrevLoads = prevMicrociclos.reduce((acc, mcName) => {
+                const mcLoad = allRecords
+                    .filter(r => r.JUGADOR === playerName && r.MICROCICLO === mcName)
+                    .reduce((s, r) => s + Number(r.UA || 0), 0);
+                return acc + mcLoad;
+            }, 0);
+
+            const chronicLoad = prevMicrociclos.length > 0 ? (sumPrevLoads / prevMicrociclos.length) : 0;
+            const acwr = chronicLoad > 0 ? Number((acuteLoad / chronicLoad).toFixed(2)) : 0;
+
+            return {
+                acuteLoad,
+                chronicLoad: Math.round(chronicLoad),
+                acwr,
+                prevWeeksAvailable: prevMicrociclos.length
+            };
+        }
+
+        function getACWRClassification(acwr) {
+            if (acwr === 0) return { label: 'Sin datos', badgeClass: 'bg-slate-100 text-slate-600', colorHex: '#94A3B8', zone: 'none' };
+            if (acwr < 0.80) return { label: 'Infracarga', badgeClass: 'bg-sky-100 text-sky-800 border border-sky-200', colorHex: '#0284C7', zone: 'red' };
+            if (acwr <= 1.30) return { label: 'Zona Óptima', badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-200', colorHex: '#10B981', zone: 'green' };
+            if (acwr <= 1.50) return { label: 'Precaución', badgeClass: 'bg-amber-100 text-amber-800 border border-amber-200', colorHex: '#F59E0B', zone: 'amber' };
+            return { label: 'Alto Riesgo', badgeClass: 'bg-rose-100 text-rose-800 border border-rose-200', colorHex: '#EF4444', zone: 'red' };
+        }
+
+        // 8. RENDERIZADO DEL DASHBOARD (KPIs, GRÁFICOS Y TABLA)
+        function renderDashboard() {
+            const selectedMc = document.getElementById('filter-microciclo').value;
+            const selectedDia = document.getElementById('filter-dia').value;
+            const selectedJugador = document.getElementById('filter-jugador').value;
+
+            if (!selectedMc || allRecords.length === 0) {
+                document.getElementById('records-table-body').innerHTML = `
+                    <tr><td colspan="10" class="py-12 text-center text-slate-400 font-medium">No hay registros cargados. Pega tu enlace CSV de Google Sheets arriba o importa un Excel en la pestaña 3.</td></tr>
+                `;
+                return;
+            }
+
+            // Registros filtrados por la selección exacta de los 3 desplegables
+            let filteredRecords = allRecords.filter(r => r.MICROCICLO === selectedMc);
+            if (selectedDia !== 'ALL') {
+                filteredRecords = filteredRecords.filter(r => r.DIA_SEMANA === selectedDia);
+            }
+            if (selectedJugador !== 'ALL') {
+                filteredRecords = filteredRecords.filter(r => r.JUGADOR === selectedJugador);
+            }
+
+            // Lista de jugadores dentro del ámbito actual
+            const squadPlayers = [...new Set(allRecords.map(r => r.JUGADOR))];
+            const scopePlayers = selectedJugador === 'ALL' ? squadPlayers : [selectedJugador];
+
+            // KPI 1: Carga Total / Media UA
+            const totalSelectionUA = filteredRecords.reduce((s, r) => s + Number(r.UA || 0), 0);
+            const activePlayersInSelection = [...new Set(filteredRecords.map(r => r.JUGADOR))].length || 1;
+            const avgPlayerUA = Math.round(totalSelectionUA / activePlayersInSelection);
+
+            document.getElementById('kpi1-title').textContent = selectedJugador === 'ALL' ? 'Carga Media / Jugador' : `Carga ${selectedJugador}`;
+            document.getElementById('kpi-ua-main').textContent = (selectedJugador === 'ALL' ? avgPlayerUA : totalSelectionUA).toLocaleString('es-ES');
+            document.getElementById('kpi-ua-team-total').textContent = `${totalSelectionUA.toLocaleString('es-ES')} UA`;
+
+            // KPI 2: RPE Medio y Minutos
+            const totalMinutes = filteredRecords.reduce((s, r) => s + Number(r.MINUTOS || 0), 0);
+            const avgMinutesPerPlayer = Math.round(totalMinutes / activePlayersInSelection);
+            const validRpeRows = filteredRecords.filter(r => Number(r.RPE) > 0);
+            const avgRpe = validRpeRows.length > 0
+                ? (validRpeRows.reduce((s, r) => s + Number(r.RPE), 0) / validRpeRows.length).toFixed(1)
+                : '0.0';
+
+            document.getElementById('kpi-rpe-avg').textContent = avgRpe;
+            document.getElementById('kpi-minutes-info').textContent = `${totalMinutes.toLocaleString('es-ES')} min (${avgMinutesPerPlayer}'/jug)`;
+
+            // KPI 3: Ratio Agudo:Crónico (ACWR)
+            const playerAcwrList = scopePlayers.map(p => ({
+                player: p,
+                ...calculatePlayerACWR(p, selectedMc)
+            })).filter(item => item.acuteLoad > 0);
+
+            const acwrDiv = playerAcwrList.length || 1;
+            const avgAcwr = Number((playerAcwrList.reduce((s, x) => s + x.acwr, 0) / acwrDiv).toFixed(2));
+            const avgChronic = Math.round(playerAcwrList.reduce((s, x) => s + x.chronicLoad, 0) / acwrDiv);
+            const prevCount = playerAcwrList.length > 0 ? playerAcwrList[0].prevWeeksAvailable : 0;
+
+            document.getElementById('kpi-acwr-val').textContent = avgAcwr.toFixed(2);
+            document.getElementById('kpi-chronic-val').textContent = `${avgChronic.toLocaleString('es-ES')} UA`;
+            document.getElementById('kpi-chronic-label').textContent = prevCount < 4
+                ? `Crónica (${prevCount} sem. previas):`
+                : 'Crónica (4 sem. previas):';
+
+            const acwrClass = getACWRClassification(avgAcwr);
+            const acwrBadge = document.getElementById('kpi-acwr-badge');
+            acwrBadge.textContent = acwrClass.label;
+            acwrBadge.className = `px-2.5 py-0.5 rounded-full text-xs font-extrabold ${acwrClass.badgeClass}`;
+
+            // KPI 4: Alertas Activas de Molestias en el microciclo/selección
+            const molestiasRows = filteredRecords.filter(r => r.MOLESTIAS === 'Sí');
+            const uniquePlayersWithPain = [...new Set(molestiasRows.map(r => r.JUGADOR))].length;
+            const maxPainGrade = molestiasRows.length > 0
+                ? Math.max(...molestiasRows.map(r => Number(r.GRADO_MOLESTIAS || 0)))
+                : 0;
+
+            document.getElementById('kpi-molestias-count').textContent = uniquePlayersWithPain;
+            document.getElementById('kpi-molestias-max').textContent = `${maxPainGrade} / 10 → Ver`;
+
+            // Actualizar badge de alertas globales del microciclo en barra de navegación
+            updateHeaderAlertBadge(selectedMc);
+
+            // Renderizar Tabla Detallada
+            renderRecordsTable(filteredRecords, selectedMc);
+
+            // Renderizar Gráficos
+            renderWeeklyEvolutionChart(selectedJugador);
+            renderSquadMicrocicloChart(selectedMc, squadPlayers);
+        }
+
+        function renderRecordsTable(records, selectedMc) {
+            const tbody = document.getElementById('records-table-body');
+            tbody.innerHTML = '';
+
+            if (records.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">No hay registros para este filtro.</td></tr>`;
+                return;
+            }
+
+            // Precalcular ACWR de cada jugador en el microciclo seleccionado
+            const acwrCache = {};
+            [...new Set(records.map(r => r.JUGADOR))].forEach(p => {
+                acwrCache[p] = calculatePlayerACWR(p, selectedMc);
+            });
+
+            records.forEach(row => {
+                const acwrInfo = acwrCache[row.JUGADOR] || { acwr: 0 };
+                const acwrStatus = getACWRClassification(acwrInfo.acwr);
+
+                const hasPain = row.MOLESTIAS === 'Sí';
+                const painBadge = hasPain
+                    ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-200">Sí</span>`
+                    : `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">No</span>`;
+
+                const grado = Number(row.GRADO_MOLESTIAS || 0);
+                const gradoColor = grado >= 6
+                    ? 'bg-rose-600 text-white'
+                    : grado >= 1
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-slate-100 text-slate-400';
+
+                const tr = document.createElement('tr');
+                tr.className = hasPain ? 'bg-rose-50/30 hover:bg-rose-50/70 transition' : 'hover:bg-slate-50 transition';
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-mono text-xs text-slate-600">${row.FECHA}</td>
+                    <td class="py-3 px-3">
+                        <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-xs font-bold">${row.DIA_SEMANA}</span>
+                    </td>
+                    <td class="py-3 px-3 text-xs font-semibold text-slate-600">${row.MICROCICLO}</td>
+                    <td class="py-3 px-4 font-bold text-slate-900">${row.JUGADOR}</td>
+                    <td class="py-3 px-3 text-center">
+                        <input type="number" min="0" max="150" value="${row.MINUTOS}" onchange="inlineEditRecord('${row.id}', 'MINUTOS', this.value)" class="inline-metric-input" title="Editar Minutos">
+                    </td>
+                    <td class="py-3 px-3 text-center">
+                        <input type="number" min="0" max="10" step="0.5" value="${row.RPE}" onchange="inlineEditRecord('${row.id}', 'RPE', this.value)" class="inline-metric-input" title="Editar RPE (1-10)">
+                    </td>
+                    <td class="py-3 px-3 text-right font-mono font-extrabold text-slate-900">${Number(row.UA).toLocaleString('es-ES')}</td>
+                    <td class="py-3 px-3 text-center bg-cobalt-50/30">
+                        <span class="px-2.5 py-0.5 rounded-full font-mono text-xs font-extrabold ${acwrStatus.badgeClass}">${acwrInfo.acwr.toFixed(2)}</span>
+                    </td>
+                    <td class="py-3 px-3 text-center">${painBadge}</td>
+                    <td class="py-3 px-4 text-center">
+                        <span class="inline-block min-w-[36px] px-2 py-0.5 rounded-md font-mono text-xs font-extrabold ${gradoColor}">${grado}/10</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function inlineEditRecord(recordId, field, newVal) {
+            const idx = allRecords.findIndex(r => r.id === recordId);
+            if (idx === -1) return;
+
+            const num = Math.max(0, Number(newVal) || 0);
+            if (field === 'MINUTOS') {
+                allRecords[idx].MINUTOS = num;
+            } else if (field === 'RPE') {
+                allRecords[idx].RPE = Math.min(10, num);
+            }
+            allRecords[idx].UA = Math.round(allRecords[idx].MINUTOS * allRecords[idx].RPE);
+
+            saveRecordsToStorage();
+            renderDashboard();
+            showToast(`Recalculado ${allRecords[idx].JUGADOR}: ${allRecords[idx].UA} UA`, '#2563EB');
+        }
+
+        // 9. GRÁFICOS CON CHART.JS
+        function renderWeeklyEvolutionChart(selectedJugador) {
+            const ctx = document.getElementById('weeklyEvolutionChart').getContext('2d');
+            const orderedMcs = getOrderedMicrociclos();
+            const allPlayers = [...new Set(allRecords.map(r => r.JUGADOR))];
+            const scopePlayers = selectedJugador === 'ALL' ? allPlayers : [selectedJugador];
+
+            const loads = [];
+            const acwrs = [];
+
+            orderedMcs.forEach(mc => {
+                let sumUa = 0;
+                let sumAcwr = 0;
+                let active = 0;
+
+                scopePlayers.forEach(p => {
+                    const m = calculatePlayerACWR(p, mc);
+                    if (m.acuteLoad > 0) {
+                        sumUa += m.acuteLoad;
+                        sumAcwr += m.acwr;
+                        active++;
+                    }
+                });
+
+                const div = active || 1;
+                loads.push(Math.round(sumUa / div));
+                acwrs.push(Number((sumAcwr / div).toFixed(2)));
+            });
+
+            document.getElementById('chart1-subtitle').textContent = selectedJugador === 'ALL'
+                ? 'Media semanal de plantilla (UA en barras) vs. Ratio ACWR medio (línea)'
+                : `Evolución individual de ${selectedJugador}: Carga semanal (UA) vs. Ratio ACWR`;
+
+            if (weeklyChartInstance) weeklyChartInstance.destroy();
+
+            weeklyChartInstance = new Chart(ctx, {
+                data: {
+                    labels: orderedMcs,
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: 'Ratio Agudo:Crónico (ACWR)',
+                            data: acwrs,
+                            borderColor: '#EF4444',
+                            backgroundColor: '#EF4444',
+                            borderWidth: 3,
+                            pointRadius: 5,
+                            pointBackgroundColor: '#FFFFFF',
+                            pointBorderColor: '#EF4444',
+                            pointBorderWidth: 2.5,
+                            tension: 0.25,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Carga Semanal (UA)',
+                            data: loads,
+                            backgroundColor: 'rgba(37, 99, 235, 0.86)',
+                            hoverBackgroundColor: '#1D4ED8',
+                            borderRadius: 8,
+                            barPercentage: 0.52,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#0F172A',
+                            titleFont: { family: 'Plus Jakarta Sans', size: 12, weight: 'bold' },
+                            bodyFont: { family: 'JetBrains Mono', size: 12 },
+                            padding: 12,
+                            cornerRadius: 10
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#475569', font: { weight: '700', size: 11 } }
+                        },
+                        y: {
+                            type: 'linear',
+                            position: 'left',
+                            beginAtZero: true,
+                            title: { display: true, text: 'Carga (UA)', color: '#2563EB', font: { weight: '700', size: 11 } },
+                            grid: { color: '#F1F5F9' },
+                            ticks: { color: '#64748B', font: { family: 'JetBrains Mono', size: 11 } }
+                        },
+                        y1: {
+                            type: 'linear',
+                            position: 'right',
+                            min: 0,
+                            max: 2.2,
+                            title: { display: true, text: 'Ratio ACWR', color: '#EF4444', font: { weight: '700', size: 11 } },
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#EF4444', font: { family: 'JetBrains Mono', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderSquadMicrocicloChart(selectedMc, squadPlayers) {
+            const ctx = document.getElementById('squadComparisonChart').getContext('2d');
+
+            const items = squadPlayers.map(p => {
+                const m = calculatePlayerACWR(p, selectedMc);
+                const status = getACWRClassification(m.acwr);
+                return {
+                    player: p,
+                    shortName: p.split(' ').slice(-1)[0],
+                    acuteLoad: m.acuteLoad,
+                    acwr: m.acwr,
+                    statusLabel: status.label,
+                    color: status.colorHex
+                };
+            }).sort((a, b) => b.acuteLoad - a.acuteLoad);
+
+            if (squadChartInstance) squadChartInstance.destroy();
+
+            squadChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: items.map(i => i.shortName),
+                    datasets: [{
+                        label: 'Carga Aguda (UA)',
+                        data: items.map(i => i.acuteLoad),
+                        backgroundColor: items.map(i => i.color),
+                        borderRadius: 6,
+                        barPercentage: 0.72
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#0F172A',
+                            bodyFont: { family: 'JetBrains Mono', size: 12 },
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    const item = items[context.dataIndex];
+                                    return ` ${item.acuteLoad} UA · ACWR: ${item.acwr.toFixed(2)} (${item.statusLabel})`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: '#F1F5F9' },
+                            ticks: { color: '#64748B', font: { family: 'JetBrains Mono', size: 10 } }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: '#1E293B', font: { weight: '700', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 10. PESTAÑA 2: ALERTAS MÉDICO-FÍSICAS (MOLESTIAS + ACWR)
+        function updateHeaderAlertBadge(selectedMc) {
+            const mcRecords = allRecords.filter(r => r.MICROCICLO === selectedMc);
+            const playersPain = new Set(mcRecords.filter(r => r.MOLESTIAS === 'Sí').map(r => r.JUGADOR));
+            const allPlayers = [...new Set(allRecords.map(r => r.JUGADOR))];
+            const acwrRedPlayers = allPlayers.filter(p => {
+                const m = calculatePlayerACWR(p, selectedMc);
+                return m.acuteLoad > 0 && (m.acwr > 1.50 || m.acwr < 0.80);
+            });
+
+            const totalFlagged = new Set([...playersPain, ...acwrRedPlayers]).size;
+            document.getElementById('nav-alert-badge').textContent = totalFlagged;
+        }
+
+        function renderAlertsView() {
+            const selectedMc = document.getElementById('filter-microciclo').value || getOrderedMicrociclos().slice(-1)[0] || 'Microciclo 1';
+            document.getElementById('alerts-microciclo-title').textContent = selectedMc;
+
+            // BLOQUE 1: Molestias = "Sí" en el microciclo actual, ordenadas por GRADO DE MOLESTIAS descendente
+            const painRecords = allRecords
+                .filter(r => r.MICROCICLO === selectedMc && r.MOLESTIAS === 'Sí')
+                .sort((a, b) => Number(b.GRADO_MOLESTIAS || 0) - Number(a.GRADO_MOLESTIAS || 0));
+
+            document.getElementById('badge-total-molestias').textContent = `${painRecords.length} reportes`;
+            const painGrid = document.getElementById('molestias-cards-grid');
+
+            if (painRecords.length === 0) {
+                painGrid.innerHTML = `<div class="col-span-full py-6 text-center text-sm text-emerald-700 font-semibold bg-emerald-50/60 rounded-xl border border-emerald-200">Ningún jugador ha reportado molestias en ${selectedMc}.</div>`;
+            } else {
+                painGrid.innerHTML = painRecords.map(r => {
+                    const grado = Number(r.GRADO_MOLESTIAS || 0);
+                    const isSevere = grado >= 6;
+                    const borderClass = isSevere ? 'border-rose-300 bg-rose-50/40' : 'border-amber-300 bg-amber-50/40';
+                    const pillClass = isSevere ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white';
+                    const advice = isSevere
+                        ? 'Grado alto (≥ 6): Valoración fisioterapia obligatoria antes de salir al campo.'
+                        : 'Molestia leve-moderada (1-5): Controlar cargas de alta velocidad y cambios de dirección.';
+
+                    return `
+                        <div class="rounded-xl border ${borderClass} p-4 flex flex-col justify-between gap-2.5">
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <h4 class="font-extrabold text-slate-900 text-base">${r.JUGADOR}</h4>
+                                    <span class="text-xs font-mono text-slate-500">${r.FECHA} · Sesión <strong>${r.DIA_SEMANA}</strong></span>
+                                </div>
+                                <span class="px-3 py-1 rounded-lg font-mono text-xs font-extrabold ${pillClass}">Grado ${grado}/10</span>
+                            </div>
+                            <p class="text-xs text-slate-700 leading-relaxed">${advice}</p>
+                            <div class="pt-2 border-t border-slate-200/70 flex justify-between text-[11px] font-mono text-slate-500">
+                                <span>Minutos sesión: <strong>${r.MINUTOS}'</strong></span>
+                                <span>RPE: <strong>${r.RPE}</strong> · UA: <strong>${r.UA}</strong></span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // BLOQUE 2: Semáforo ACWR de toda la plantilla
+            const allPlayers = [...new Set(allRecords.map(r => r.JUGADOR))];
+            const redList = [];
+            const amberList = [];
+            const greenList = [];
+
+            allPlayers.forEach(p => {
+                const m = calculatePlayerACWR(p, selectedMc);
+                if (m.acuteLoad === 0) return;
+
+                const item = { player: p, ...m };
+                if (m.acwr > 1.50 || m.acwr < 0.80) {
+                    item.note = m.acwr > 1.50
+                        ? `Pico agudo (+${Math.round((m.acwr - 1) * 100)}% sobre crónica). Reducir volumen hoy.`
+                        : `Infracarga aguda. Valorar bloque compensatorio post-sesión.`;
+                    redList.push(item);
+                } else if (m.acwr >= 1.30) {
+                    item.note = `Límite superior de carga. Vigilar respuesta neuromuscular.`;
+                    amberList.push(item);
+                } else {
+                    item.note = `Progresión segura dentro del Sweet Spot (0.80 - 1.30).`;
+                    greenList.push(item);
+                }
+            });
+
+            document.getElementById('count-acwr-red').textContent = redList.length;
+            document.getElementById('count-acwr-amber').textContent = amberList.length;
+            document.getElementById('count-acwr-green').textContent = greenList.length;
+
+            const renderAcwrCard = (list, emptyMsg) => {
+                if (list.length === 0) return `<p class="text-xs text-slate-400 italic text-center py-4">${emptyMsg}</p>`;
+                return list.map(i => `
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="font-extrabold text-slate-900 text-sm">${i.player}</span>
+                            <span class="font-mono text-xs font-extrabold px-2 py-0.5 rounded bg-white border border-slate-200">ACWR: ${i.acwr.toFixed(2)}</span>
+                        </div>
+                        <p class="text-xs text-slate-600">${i.note}</p>
+                        <div class="pt-1.5 border-t border-slate-200/60 flex justify-between text-[11px] font-mono text-slate-500">
+                            <span>Aguda: <strong>${i.acuteLoad} UA</strong></span>
+                            <span>Crónica (${i.prevWeeksAvailable}s): <strong>${i.chronicLoad} UA</strong></span>
+                        </div>
+                    </div>
+                `).join('');
+            };
+
+            document.getElementById('list-acwr-red').innerHTML = renderAcwrCard(redList, 'Sin jugadores en bandera roja.');
+            document.getElementById('list-acwr-amber').innerHTML = renderAcwrCard(amberList, 'Sin jugadores en precaución.');
+            document.getElementById('list-acwr-green').innerHTML = renderAcwrCard(greenList, 'Sin registros en zona óptima.');
+        }
+
+        // 11. IMPORTACIÓN Y EXPORTACIÓN EXCEL (.XLSX) + CSV LOCAL
+        function setupDragAndDrop() {
+            const dropzone = document.getElementById('excel-dropzone');
+            const fileInput = document.getElementById('excel-file-input');
+
+            dropzone.addEventListener('click', () => fileInput.click());
+            dropzone.addEventListener('dragover', e => {
+                e.preventDefault();
+                dropzone.classList.add('border-cobalt-600', 'bg-cobalt-50/50');
+            });
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('border-cobalt-600', 'bg-cobalt-50/50');
+            });
+            dropzone.addEventListener('drop', e => {
+                e.preventDefault();
+                dropzone.classList.remove('border-cobalt-600', 'bg-cobalt-50/50');
+                if (e.dataTransfer.files.length > 0) handleLocalFileUpload(e.dataTransfer.files[0]);
+            });
+            fileInput.addEventListener('change', e => {
+                if (e.target.files.length > 0) handleLocalFileUpload(e.target.files[0]);
+            });
+        }
+
+        function handleLocalFileUpload(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+                    pendingImportRecords = rows
+                        .map((r, i) => normalizeRowObject(r, i))
+                        .filter(r => r.JUGADOR !== '');
+
+                    if (pendingImportRecords.length === 0) {
+                        showToast('No se encontraron filas válidas con la columna JUGADOR.', '#EF4444');
+                        return;
+                    }
+
+                    document.getElementById('preview-filename').textContent = `Archivo: ${file.name}`;
+                    document.getElementById('preview-summary').textContent = `${pendingImportRecords.length} registros listos para importar`;
+                    document.getElementById('import-preview-tbody').innerHTML = pendingImportRecords.slice(0, 10).map(r => `
+                        <tr>
+                            <td class="p-2 font-mono">${r.FECHA}</td>
+                            <td class="p-2 font-semibold">${r.MICROCICLO}</td>
+                            <td class="p-2 font-bold text-cobalt-700">${r.DIA_SEMANA}</td>
+                            <td class="p-2 font-bold">${r.JUGADOR}</td>
+                            <td class="p-2 text-center font-mono">${r.MINUTOS}'</td>
+                            <td class="p-2 text-center font-mono">${r.RPE}</td>
+                            <td class="p-2 text-right font-mono font-bold">${r.UA}</td>
+                            <td class="p-2 text-center">${r.MOLESTIAS} (${r.GRADO_MOLESTIAS})</td>
+                        </tr>
+                    `).join('');
+
+                    document.getElementById('import-preview-box').classList.remove('hidden');
+                    showToast('Archivo leído correctamente. Confirma la importación.', '#10B981');
+                } catch (err) {
+                    showToast('Error al leer el archivo. Comprueba que sea .xlsx o .csv válido.', '#EF4444');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function confirmImportRows(mode) {
+            if (pendingImportRecords.length === 0) return;
+            allRecords = mode === 'replace' ? [...pendingImportRecords] : [...allRecords, ...pendingImportRecords];
+            pendingImportRecords = [];
+            document.getElementById('import-preview-box').classList.add('hidden');
+            document.getElementById('excel-file-input').value = '';
+
+            saveRecordsToStorage();
+            populateAllDropdowns();
+            switchTab('dashboard');
+            showToast('Datos importados y ACWR recalculado.', '#10B981');
+        }
+
+        function downloadExcelTemplate9Cols() {
+            const sample = [
+                {
+                    FECHA: '2026-11-20',
+                    'DIA SEMANA': 'MD-3',
+                    JUGADOR: 'Dani Olmo',
+                    RPE: 8.0,
+                    MOLESTIAS: 'No',
+                    'GRADO DE MOLESTIAS': 0,
+                    MICROCICLO: 'Microciclo 7',
+                    MINUTOS: 85,
+                    UA: 680
+                },
+                {
+                    FECHA: '2026-11-20',
+                    'DIA SEMANA': 'MD-3',
+                    JUGADOR: 'Lamine Yamal',
+                    RPE: 7.5,
+                    MOLESTIAS: 'Sí',
+                    'GRADO DE MOLESTIAS': 4,
+                    MICROCICLO: 'Microciclo 7',
+                    MINUTOS: 75,
+                    UA: 563
+                }
+            ];
+            const ws = XLSX.utils.json_to_sheet(sample);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Report_App');
+            XLSX.writeFile(wb, 'Plantilla_9_Columnas_LoadControl.xlsx');
+            showToast('Plantilla Excel descargada.', '#10B981');
+        }
+
+        function exportExcelBackup() {
+            if (allRecords.length === 0) {
+                showToast('No hay datos en memoria para exportar.', '#EF4444');
+                return;
+            }
+            const rows = allRecords.map(r => {
+                const m = calculatePlayerACWR(r.JUGADOR, r.MICROCICLO);
+                return {
+                    FECHA: r.FECHA,
+                    'DIA SEMANA': r.DIA_SEMANA,
+                    JUGADOR: r.JUGADOR,
+                    RPE: r.RPE,
+                    MOLESTIAS: r.MOLESTIAS,
+                    'GRADO DE MOLESTIAS': r.GRADO_MOLESTIAS,
+                    MICROCICLO: r.MICROCICLO,
+                    MINUTOS: r.MINUTOS,
+                    UA: r.UA,
+                    ACWR_MICROCICLO: m.acwr,
+                    ESTADO_ACWR: getACWRClassification(m.acwr).label
+                };
+            });
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Report_App');
+            XLSX.writeFile(wb, `Backup_LoadControl_${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast('Copia de seguridad Excel descargada.', '#10B981');
+        }
+
+        // Descargar este propio archivo HTML listo para subir a Vercel como index.html
+        function downloadVercelIndexHTML() {
+            const fullHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+            const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'index.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Archivo index.html descargado. ¡Listo para arrastrar a Vercel!', '#2563EB');
+        }
+
+        // 12. FORMULARIO DE CARGA MANUAL RÁPIDA
+        function updateFormUAPreview() {
+            const min = Number(document.getElementById('form-minutos').value) || 0;
+            const rpe = Number(document.getElementById('form-rpe').value) || 0;
+            document.getElementById('form-ua-preview').textContent = Math.round(min * rpe);
+        }
+
+        function toggleFormGradoMolestias() {
+            const val = document.getElementById('form-molestias').value;
+            const gradoInput = document.getElementById('form-grado-molestias');
+            if (val === 'No') {
+                gradoInput.value = 0;
+            } else if (Number(gradoInput.value) === 0) {
+                gradoInput.value = 4;
+            }
+        }
+
+        function handleManualEntrySubmit(e) {
+            e.preventDefault();
+            const min = Number(document.getElementById('form-minutos').value) || 0;
+            const rpe = Number(document.getElementById('form-rpe').value) || 0;
+            const mol = document.getElementById('form-molestias').value;
+            const grado = mol === 'No' ? 0 : (Number(document.getElementById('form-grado-molestias').value) || 1);
+
+            const rawMc = document.getElementById('form-microciclo').value.trim();
+            const mc = /^\d+$/.test(rawMc) ? `Microciclo ${rawMc}` : rawMc;
+
+            const newRecord = {
+                id: `man_${Date.now()}`,
+                FECHA: document.getElementById('form-fecha').value,
+                DIA_SEMANA: document.getElementById('form-dia').value.trim(),
+                JUGADOR: document.getElementById('form-jugador').value.trim(),
+                RPE: rpe,
+                MOLESTIAS: mol,
+                GRADO_MOLESTIAS: grado,
+                MICROCICLO: mc,
+                MINUTOS: min,
+                UA: Math.round(min * rpe)
+            };
+
+            allRecords.push(newRecord);
+            saveRecordsToStorage();
+            populateAllDropdowns();
+            document.getElementById('filter-microciclo').value = newRecord.MICROCICLO;
+            populateDiaDropdownForMicrociclo();
+            switchTab('dashboard');
+            showToast(`Guardado: ${newRecord.JUGADOR} (${newRecord.UA} UA)`, '#2563EB');
+        }
+
+        function resetToDemoData() {
+            showConfirmModal(
+                'Cargar Datos de Demostración',
+                'Se cargarán 6 microciclos completos de ejemplo (12 jugadores) para probar todos los gráficos y alertas.',
+                () => {
+                    allRecords = generateDemoData6Microciclos();
+                    saveRecordsToStorage();
+                    populateAllDropdowns();
+                    renderDashboard();
+                    showToast('Datos demo de 6 microciclos cargados.', '#2563EB');
+                }
+            );
+        }
+
+        function confirmClearAllData() {
+            showConfirmModal(
+                'Borrar Datos Demo / Empezar Limpio',
+                'Se vaciarán todos los registros actuales para que sincronices únicamente tu hoja real de Google Sheets o tu Excel.',
+                () => {
+                    allRecords = [];
+                    saveRecordsToStorage();
+                    populateAllDropdowns();
+                    renderDashboard();
+                    showToast('Base de datos limpia. Pega tu URL de Google Sheets arriba.', '#10B981');
+                }
+            );
+        }
+
+        // 13. UTILIDADES UI (TOASTS Y MODAL)
+        function showToast(msg, color = '#2563EB') {
+            const container = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            el.className = 'bg-navy-900 text-white px-4 py-3 rounded-xl shadow-xl border border-slate-700 text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all duration-300 transform translate-y-2 opacity-0';
+            el.innerHTML = `<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color:${color}"></span><span>${msg}</span>`;
+            container.appendChild(el);
+
+            requestAnimationFrame(() => el.classList.remove('translate-y-2', 'opacity-0'));
+            setTimeout(() => {
+                el.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => el.remove(), 300);
+            }, 2800);
+        }
+
+        function showConfirmModal(title, message, onConfirm) {
+            const modal = document.getElementById('confirm-modal');
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+
+            const close = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            };
+
+            document.getElementById('confirm-cancel').onclick = close;
+            document.getElementById('confirm-ok').onclick = () => {
+                close();
+                onConfirm();
+            };
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+    </script>
+</body>
+</html>
